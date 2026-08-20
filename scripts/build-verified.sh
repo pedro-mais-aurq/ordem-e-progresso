@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "${SITES_ENV_READY:-}" != "1" ]]; then
-  exec "${script_dir}/sites-env.sh" -- bash "$0" "$@"
+  exec bash "${script_dir}/sites-env.sh" -- bash "$0" "$@"
 fi
 
 if command -v timeout >/dev/null 2>&1; then
@@ -36,4 +36,4 @@ cp \
   "${SITES_PROJECT_ROOT}/.openai/hosting.json" \
   "${SITES_PROJECT_ROOT}/dist/.openai/hosting.json"
 
-"${script_dir}/validate-artifact.sh"
+bash "${script_dir}/validate-artifact.sh"
