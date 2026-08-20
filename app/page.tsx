@@ -177,7 +177,7 @@ export default function Home() {
             </article>
             <article className="contact-item">
               <span>Endereço</span>
-              <address>Rua Demonstrativa, 100<br />Belo Horizonte — MG</address>
+              <address> R. Oscár Negrão de Lima, 29 - Nova Gameleira <br />Belo Horizonte — MG</address>
             </article>
             <article className="contact-item">
               <span>Atendimento</span>
