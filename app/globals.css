@@ -210,7 +210,7 @@ input {
 }
 
 .institutional-hero {
-  min-height: 860px;
+  min-height: 100vh;
   position: relative;
   display: flex;
   flex-direction: column;
