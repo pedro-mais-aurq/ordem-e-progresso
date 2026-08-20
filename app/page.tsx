@@ -169,7 +169,7 @@ export default function Home() {
           <div className="contact-grid">
             <article className="contact-item">
               <span>Telefone</span>
-              <strong>(31) 0000-0000</strong>
+              <strong>(31) 3257-7148</strong>
             </article>
             <article className="contact-item">
               <span>E-mail</span>
