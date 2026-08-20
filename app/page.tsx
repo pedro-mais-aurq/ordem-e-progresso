@@ -156,6 +156,9 @@ export default function Home() {
           <div className="contact-card__heading">
             <span className="eyebrow">Contato institucional</span>
             <h2 id="contact-title">A escola mais perto dos alunos.</h2>
+            <p className="contact-card__notice">
+  Dados demonstrativos
+</p>
           </div>
 
           <div className="contact-grid">
