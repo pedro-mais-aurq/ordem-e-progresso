@@ -155,15 +155,7 @@ export default function Home() {
         <div className="institutional-container contact-card">
           <div className="contact-card__heading">
             <span className="eyebrow">Contato institucional</span>
-            <h2 id="contact-title">A escola mais perto da comunidade.</h2>
-            <p>
-              Canais preparados para apresentar a estrutura de atendimento da escola
-              nesta demonstração institucional.
-            </p>
-            <p className="contact-card__warning">
-              <strong>Dados demonstrativos</strong> — estes canais não representam os
-              contatos oficiais da instituição.
-            </p>
+            <h2 id="contact-title">A escola mais perto dos alunos.</h2>
           </div>
 
           <div className="contact-grid">
