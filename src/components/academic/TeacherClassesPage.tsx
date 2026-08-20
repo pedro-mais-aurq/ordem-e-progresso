@@ -1,16 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
-import { DEMO_PROFILE_IDS } from "@/src/config/academic-demo";
+import {
+  ACADEMIC_PERIODS,
+  DEMO_PROFILE_IDS,
+} from "@/src/config/academic-demo";
 import {
   calculateStudentAcademicState,
   countPendingGrades,
 } from "@/src/modules/grades/calculations";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 export function TeacherClassesPage() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
 
   const assignments = useMemo(
     () =>
@@ -35,6 +40,21 @@ export function TeacherClassesPage() {
         </div>
       </header>
 
+      <section className="academic-context-bar" aria-label="Período acadêmico">
+        <label>
+          <span>Período</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {ACADEMIC_PERIODS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <div className="academic-context-bar__summary">
+          <small>Indicadores dos cards</small>
+          <strong>{period}</strong>
+        </div>
+      </section>
+
       <div className="academic-card-grid">
         {assignments.map((assignment) => {
           const schoolClass = data?.classes.find(
@@ -48,12 +68,14 @@ export function TeacherClassesPage() {
               (student) =>
                 student.classId === assignment.classId && student.active,
             ) ?? [];
-          const assessments =
+          const assessments = filterAssessmentsByPeriod(
             data?.assessments.filter(
               (assessment) =>
                 assessment.classId === assignment.classId &&
                 assessment.subjectId === assignment.subjectId,
-            ) ?? [];
+            ) ?? [],
+            period,
+          );
           const grades =
             data?.grades.filter((grade) =>
               assessments.some(
@@ -98,7 +120,9 @@ export function TeacherClassesPage() {
                   <dd>{attention}</dd>
                 </div>
               </dl>
-              <Link href="/plataforma/professor/notas">
+              <Link
+                href={`/plataforma/professor/notas?classId=${encodeURIComponent(assignment.classId)}&subjectId=${encodeURIComponent(assignment.subjectId)}&period=${encodeURIComponent(period)}`}
+              >
                 Abrir Painel Dinâmico <span aria-hidden="true">→</span>
               </Link>
             </article>

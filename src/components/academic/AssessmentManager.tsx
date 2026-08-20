@@ -5,8 +5,10 @@ import { useAcademicData } from "@/src/components/platform/AcademicDataProvider"
 import {
   ACADEMIC_PERIODS,
   DEMO_PROFILE_IDS,
+  type AcademicPeriod,
 } from "@/src/config/academic-demo";
 import { getAcademicServices } from "@/src/config/services";
+import { formatLocalDateInput } from "@/src/modules/assessments/date";
 import {
   ASSESSMENT_STATUS_LABELS,
   ASSESSMENT_TYPE_LABELS,
@@ -18,20 +20,33 @@ import type {
   AssessmentType,
 } from "@/src/types/academic";
 
-const EMPTY_FORM = {
-  name: "",
-  assignmentKey: "",
-  period: ACADEMIC_PERIODS[0] as string,
-  date: "2026-08-18",
-  type: "exam" as AssessmentType,
-  maxScore: "10",
-  weight: "1",
-  status: "draft" as AssessmentStatus,
-};
+interface AssessmentFormState {
+  name: string;
+  assignmentKey: string;
+  period: AcademicPeriod;
+  date: string;
+  type: AssessmentType;
+  maxScore: string;
+  weight: string;
+  status: AssessmentStatus;
+}
+
+function createEmptyForm(): AssessmentFormState {
+  return {
+    name: "",
+    assignmentKey: "",
+    period: ACADEMIC_PERIODS[0],
+    date: formatLocalDateInput(),
+    type: "exam" as AssessmentType,
+    maxScore: "10",
+    weight: "1",
+    status: "draft" as AssessmentStatus,
+  };
+}
 
 export function AssessmentManager() {
-  const { data, refreshSnapshot } = useAcademicData();
-  const [form, setForm] = useState(EMPTY_FORM);
+  const { data, updateAssessmentSnapshot } = useAcademicData();
+  const [form, setForm] = useState(createEmptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -87,7 +102,7 @@ export function AssessmentManager() {
   function resetForm() {
     setEditingId(null);
     setForm({
-      ...EMPTY_FORM,
+      ...createEmptyForm(),
       assignmentKey: assignmentOptions[0]?.key ?? "",
     });
     setFeedback(null);
@@ -126,7 +141,7 @@ export function AssessmentManager() {
         if (!existing) {
           throw new Error("Avaliação não encontrada para edição.");
         }
-        await services.assessments.update(
+        const updated = await services.assessments.update(
           {
             ...existing,
             name: form.name,
@@ -141,9 +156,10 @@ export function AssessmentManager() {
           },
           DEMO_PROFILE_IDS.professor,
         );
+        updateAssessmentSnapshot(updated);
         setFeedback("Avaliação atualizada com sucesso.");
       } else {
-        await services.assessments.create(
+        const created = await services.assessments.create(
           {
             name: form.name,
             classId,
@@ -156,13 +172,13 @@ export function AssessmentManager() {
           },
           DEMO_PROFILE_IDS.professor,
         );
+        updateAssessmentSnapshot(created);
         setFeedback("Avaliação criada como Rascunho.");
       }
 
-      await refreshSnapshot();
       if (!editingId) {
         setForm({
-          ...EMPTY_FORM,
+          ...createEmptyForm(),
           assignmentKey: effectiveAssignmentKey,
         });
       }
@@ -304,7 +320,7 @@ export function AssessmentManager() {
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      period: event.target.value,
+                      period: event.target.value as AcademicPeriod,
                     }))
                   }
                 >

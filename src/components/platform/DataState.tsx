@@ -3,7 +3,7 @@
 import { useAcademicData } from "./AcademicDataProvider";
 
 export function DataState({ children }: { children: React.ReactNode }) {
-  const { status, error, reload } = useAcademicData();
+  const { status, error, errorKind, reload, restoreDemo } = useAcademicData();
 
   if (status === "loading") {
     return (
@@ -15,6 +15,33 @@ export function DataState({ children }: { children: React.ReactNode }) {
   }
 
   if (status === "error") {
+    if (errorKind === "integrity") {
+      return (
+        <div className="state-panel state-panel--error" role="alert">
+          <span aria-hidden="true">!</span>
+          <div>
+            <strong>Os dados locais da demonstração estão inconsistentes.</strong>
+            <p>{error}</p>
+            <p>
+              Nenhum dado foi corrigido automaticamente. Restaurar a base
+              demonstrativa apagará todas as alterações locais desta demonstração.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const confirmed = window.confirm(
+                "Restaurar a base demonstrativa? Todas as alterações locais serão apagadas.",
+              );
+              if (confirmed) void restoreDemo();
+            }}
+          >
+            Restaurar base demonstrativa
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="state-panel state-panel--error" role="alert">
         <span aria-hidden="true">!</span>
@@ -36,4 +63,3 @@ export function DataState({ children }: { children: React.ReactNode }) {
 
   return children;
 }
-

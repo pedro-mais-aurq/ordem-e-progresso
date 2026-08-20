@@ -217,7 +217,10 @@ input {
   justify-content: space-between;
   overflow: hidden;
   background:
-    linear-gradient(116deg, rgba(7, 31, 57, 0.98) 0%, rgba(11, 59, 99, 0.95) 56%, rgba(24, 96, 141, 0.9) 100%);
+    linear-gradient(116deg, rgba(7, 31, 57, 0.82) 0%, rgba(11, 59, 99, 0.65) 52%, rgba(12, 50, 72, 0.46) 100%),
+    linear-gradient(0deg, rgba(7, 31, 57, 0.46), rgba(7, 31, 57, 0.08) 52%, rgba(7, 31, 57, 0.28)),
+    var(--campus-image) 35% center / cover no-repeat,
+    var(--institutional-blue-900);
   color: #fff;
 }
 
@@ -258,6 +261,7 @@ input {
 
 .institutional-hero__copy {
   max-width: 760px;
+  text-shadow: 0 2px 18px rgba(4, 20, 35, 0.44);
 }
 
 .eyebrow,
@@ -360,9 +364,12 @@ input {
   position: relative;
   z-index: 2;
   min-height: 190px;
-  background:
-    linear-gradient(90deg, rgba(7, 31, 57, 0.82), rgba(7, 31, 57, 0.12)),
-    url("/assets/escola-campus.webp") center / cover no-repeat;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(
+    90deg,
+    rgba(7, 31, 57, 0.54),
+    rgba(7, 31, 57, 0.04)
+  );
 }
 
 .campus-strip span {
@@ -1752,6 +1759,7 @@ input {
 
   .institutional-hero {
     min-height: 820px;
+    background-position: center, center, 30% center, center;
   }
 
   .institutional-hero__content {
@@ -1913,6 +1921,7 @@ input {
 
   .institutional-hero {
     min-height: 780px;
+    background-position: center, center, 28% center, center;
   }
 
   .institutional-hero__content {
@@ -2477,6 +2486,211 @@ input {
 
 .gradebook-heading {
   align-items: center;
+}
+
+.grade-csv-import {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(7, 31, 57, 0.035);
+}
+
+.grade-csv-import__summary,
+.grade-csv-import__preview-heading,
+.grade-csv-import__confirm {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.grade-csv-import__summary h2 {
+  margin: 4px 0 3px;
+  color: var(--institutional-blue-950);
+  font-size: 18px;
+}
+
+.grade-csv-import__summary p,
+.grade-csv-import__preview-heading span,
+.grade-csv-import__confirm > span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.grade-csv-import__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grade-csv-import .button {
+  min-height: 38px;
+  padding-inline: 14px;
+  border: 0;
+  border-radius: 9px;
+  font-size: 9px;
+}
+
+.grade-csv-import .button--secondary {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--institutional-blue-700);
+}
+
+.grade-csv-import__panel {
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.grade-csv-import__fields {
+  padding-block: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 12px;
+}
+
+.grade-csv-import__fields label,
+.grade-csv-import__fields label > span {
+  display: grid;
+  gap: 6px;
+}
+
+.grade-csv-import__fields label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.grade-csv-import__fields select,
+.grade-csv-import__fields input[type="file"] {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #cbd8df;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 10px;
+}
+
+.grade-csv-import__issues,
+.grade-csv-import__result {
+  margin: 10px 0;
+  padding: 13px;
+  border-radius: 10px;
+  font-size: 9px;
+}
+
+.grade-csv-import__issues {
+  border: 1px solid #f0caca;
+  background: #fff3f3;
+  color: var(--danger);
+}
+
+.grade-csv-import__issues ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.grade-csv-import__result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  border: 1px solid #d7e4db;
+  background: #f1f7f3;
+  color: var(--institutional-green-700);
+}
+
+.grade-csv-import__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.grade-csv-import__table {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+
+.grade-csv-import__table th,
+.grade-csv-import__table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.grade-csv-import__table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.grade-csv-import__table th strong,
+.grade-csv-import__table th small,
+.csv-row-error {
+  display: block;
+}
+
+.grade-csv-import__table th small,
+.csv-row-error {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.csv-row-error {
+  color: var(--danger);
+}
+
+.csv-status {
+  min-height: 23px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--institutional-blue-100);
+  color: var(--institutional-blue-700);
+  font-size: 7px;
+  font-weight: 850;
+}
+
+.csv-status--unchanged {
+  background: #edf1f3;
+  color: #53636e;
+}
+
+.csv-status--conflict {
+  background: var(--amber-100);
+  color: var(--amber-600);
+}
+
+.csv-status--error {
+  background: #fff3f3;
+  color: var(--danger);
+}
+
+.grade-csv-import__table fieldset {
+  margin: 7px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  border: 0;
+}
+
+.grade-csv-import__table fieldset label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 8px;
 }
 
 .gradebook-keyboard-hint {
@@ -3318,6 +3532,62 @@ kbd {
 
   .gradebook-keyboard-hint {
     display: none;
+  }
+
+  .grade-csv-import__summary,
+  .grade-csv-import__preview-heading,
+  .grade-csv-import__confirm {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grade-csv-import__actions,
+  .grade-csv-import__actions .button,
+  .grade-csv-import__confirm .button {
+    width: 100%;
+  }
+
+  .grade-csv-import__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .grade-csv-import .button {
+    min-height: 44px;
+  }
+
+  .grade-csv-import__table {
+    min-width: 0;
+  }
+
+  .grade-csv-import__table thead {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .grade-csv-import__table,
+  .grade-csv-import__table tbody,
+  .grade-csv-import__table tr,
+  .grade-csv-import__table th,
+  .grade-csv-import__table td {
+    display: block;
+  }
+
+  .grade-csv-import__table tr {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .grade-csv-import__table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .grade-csv-import__table th,
+  .grade-csv-import__table td {
+    padding: 4px 0;
+    border: 0;
   }
 
   .gradebook-metrics {

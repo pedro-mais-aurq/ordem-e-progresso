@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
-import { DEMO_PROFILE_IDS } from "@/src/config/academic-demo";
+import {
+  ACADEMIC_PERIODS,
+  DEMO_PROFILE_IDS,
+} from "@/src/config/academic-demo";
 import {
   ASSESSMENT_STATUS_LABELS,
   ASSESSMENT_TYPE_LABELS,
@@ -13,18 +16,24 @@ import {
   calculateWeightedAverage,
 } from "@/src/modules/grades/calculations";
 import { formatScore } from "@/src/modules/grades/input";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 export function StudentGradesPage() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
   const student = data?.students.find(
     (item) => item.id === DEMO_PROFILE_IDS.aluno,
   );
-  const assessments = useMemo(
+  const allAssessments = useMemo(
     () =>
       (data?.assessments ?? [])
         .filter((assessment) => assessment.classId === student?.classId)
         .sort((a, b) => a.date.localeCompare(b.date)),
     [data, student?.classId],
+  );
+  const assessments = useMemo(
+    () => filterAssessmentsByPeriod(allAssessments, period),
+    [allAssessments, period],
   );
   const grades = useMemo(
     () =>
@@ -50,6 +59,8 @@ export function StudentGradesPage() {
           </p>
         </div>
       </header>
+
+      <PeriodSelector period={period} onChange={setPeriod} />
 
       {subjects.length === 0 ? (
         <div className="academic-empty academic-empty--large">
@@ -146,12 +157,16 @@ export function StudentGradesPage() {
 
 export function StudentAssessmentsPage() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
   const student = data?.students.find(
     (item) => item.id === DEMO_PROFILE_IDS.aluno,
   );
-  const assessments = (data?.assessments ?? [])
-    .filter((assessment) => assessment.classId === student?.classId)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const assessments = filterAssessmentsByPeriod(
+    (data?.assessments ?? [])
+      .filter((assessment) => assessment.classId === student?.classId)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    period,
+  );
   const grades = (data?.grades ?? []).filter(
     (grade) => grade.studentId === student?.id,
   );
@@ -168,6 +183,8 @@ export function StudentAssessmentsPage() {
           </p>
         </div>
       </header>
+
+      <PeriodSelector period={period} onChange={setPeriod} />
 
       {assessments.length === 0 ? (
         <div className="academic-empty academic-empty--large">
@@ -218,5 +235,30 @@ export function StudentAssessmentsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PeriodSelector({
+  period,
+  onChange,
+}: {
+  period: string;
+  onChange: (period: string) => void;
+}) {
+  return (
+    <section className="academic-context-bar" aria-label="Período acadêmico">
+      <label>
+        <span>Período</span>
+        <select value={period} onChange={(event) => onChange(event.target.value)}>
+          {ACADEMIC_PERIODS.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+      </label>
+      <div className="academic-context-bar__summary">
+        <small>Consulta do aluno</small>
+        <strong>{period}</strong>
+      </div>
+    </section>
   );
 }

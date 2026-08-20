@@ -1,3 +1,5 @@
+import type { AcademicPeriod } from "@/src/config/academic-demo";
+
 export interface BaseEntity {
   id: string;
 }
@@ -31,21 +33,26 @@ export interface Subject extends BaseEntity {
   name: string;
 }
 
-export type AssessmentType =
-  | "exam"
-  | "assignment"
-  | "activity"
-  | "seminar"
-  | "recovery"
-  | "other";
+export const ASSESSMENT_TYPES = [
+  "exam",
+  "assignment",
+  "activity",
+  "seminar",
+  "recovery",
+  "other",
+] as const;
 
-export type AssessmentStatus = "draft" | "reviewed" | "closed";
+export type AssessmentType = (typeof ASSESSMENT_TYPES)[number];
+
+export const ASSESSMENT_STATUSES = ["draft", "reviewed", "closed"] as const;
+
+export type AssessmentStatus = (typeof ASSESSMENT_STATUSES)[number];
 
 export interface Assessment extends BaseEntity {
   name: string;
   classId: string;
   subjectId: string;
-  period: string;
+  period: AcademicPeriod;
   date: string;
   type: AssessmentType;
   maxScore: number;
@@ -88,8 +95,11 @@ export interface AcademicDataset {
   subjects: Subject[];
   assessments: Assessment[];
   grades: Grade[];
-  auditEntries: AuditEntry[];
   teachingAssignments: TeachingAssignment[];
+}
+
+export interface AcademicSeedDataset extends AcademicDataset {
+  auditEntries: AuditEntry[];
 }
 
 export type UserProfile = "professor" | "coordenacao" | "aluno";

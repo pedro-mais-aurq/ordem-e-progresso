@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
+import { GradeCsvImport } from "@/src/components/academic/GradeCsvImport";
 import {
   ACADEMIC_DEMO_CONFIG,
   ACADEMIC_PERIODS,
@@ -19,30 +21,44 @@ import {
 } from "@/src/modules/assessments/presentation";
 import {
   calculateClassAverage,
+  calculateGradebookCompletion,
   calculateStudentAcademicState,
   calculateWeightedAverage,
   countPendingGrades,
   type AcademicState,
 } from "@/src/modules/grades/calculations";
 import {
+  loadAuditHistory,
+  selectContextualStudentGrades,
+  shouldCloseStudentDetail,
+  type AuditHistoryState,
+} from "@/src/modules/grades/audit-history";
+import {
+  createLatestContextRequestSequence,
+  resolveAuthorizedContextKey,
+} from "@/src/modules/grades/context";
+import {
   filterGradebookRows,
   type GradebookFilter,
   type GradebookStudentRow,
 } from "@/src/modules/grades/filters";
 import { formatScore, validateScoreInput } from "@/src/modules/grades/input";
+import { persistManualGradeIncrementally } from "@/src/modules/grades/persistence";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 import {
+  createGradeBlurCommitGuard,
   getNextEditableCell,
   type GradeNavigationAction,
 } from "@/src/modules/grades/keyboard";
 import type {
   Assessment,
-  AuditEntry,
   Grade,
   Student,
 } from "@/src/types/academic";
 
 interface GradebookPageProps {
   readOnly?: boolean;
+  initialContext?: { classId: string; subjectId: string; period?: string };
 }
 
 type CellSaveState = "idle" | "editing" | "saving" | "saved" | "error";
@@ -57,21 +73,53 @@ function academicStateLabel(state: AcademicState): string {
   return "Regular";
 }
 
-export function GradebookPage({ readOnly = false }: GradebookPageProps) {
-  const { data, refreshSnapshot } = useAcademicData();
-  const [contextKey, setContextKey] = useState("");
-  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
+export function GradebookPage({
+  readOnly = false,
+  initialContext,
+}: GradebookPageProps) {
+  const { data, updateGradeSnapshot, updateGradesSnapshot } = useAcademicData();
+  const requestedInitialKey = initialContext
+    ? `${initialContext.classId}::${initialContext.subjectId}`
+    : "";
+  const [contextKey, setContextKey] = useState(requestedInitialKey);
+  const [loadedContextKey, setLoadedContextKey] = useState("");
+  const [period, setPeriod] = useState<string>(
+    initialContext?.period?.trim() || ACADEMIC_PERIODS[0],
+  );
   const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
-  const [loadingContext, setLoadingContext] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(true);
   const [contextError, setContextError] = useState<string | null>(null);
   const [filter, setFilter] = useState<GradebookFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [mobileAssessmentId, setMobileAssessmentId] = useState("");
+  const [csvApplying, setCsvApplying] = useState(false);
+  const [manualSaveCount, setManualSaveCount] = useState(0);
   const inputRefs = useRef(new Map<string, HTMLInputElement>());
   const mutationChains = useRef(new Map<string, Promise<unknown>>());
+  const contextRequests = useRef(createLatestContextRequestSequence());
+  const studentDetailTrigger = useRef<HTMLElement | null>(null);
+  const csvApplyingRef = useRef(false);
+
+  const handleCsvApplyingChange = useCallback((applying: boolean) => {
+    csvApplyingRef.current = applying;
+    setCsvApplying(applying);
+  }, []);
+
+  const openStudentDetail = useCallback((studentId: string) => {
+    studentDetailTrigger.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setSelectedStudentId(studentId);
+  }, []);
+
+  const closeStudentDetail = useCallback(() => {
+    setSelectedStudentId(null);
+    queueMicrotask(() => studentDetailTrigger.current?.focus());
+  }, []);
 
   const contextOptions = useMemo(() => {
     const assignments = (data?.teachingAssignments ?? []).filter(
@@ -106,12 +154,25 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
       });
   }, [data, readOnly]);
 
-  const effectiveContextKey =
-    contextKey || contextOptions[0]?.key || "";
+  const effectiveContextKey = resolveAuthorizedContextKey(
+    contextOptions,
+    contextKey,
+  );
 
   const currentContext =
-    contextOptions.find((option) => option.key === effectiveContextKey) ??
+    contextOptions.find((option) => option.key === loadedContextKey) ??
     contextOptions[0];
+
+  function beginContextTransition(nextContextKey: string) {
+    setContextKey(nextContextKey);
+    setSelectedStudentId(null);
+    setLoadingContext(true);
+    setContextError(null);
+    setLoadedContextKey("");
+    setStudents([]);
+    setAllAssessments([]);
+    setGrades([]);
+  }
 
   useEffect(() => {
     if (!effectiveContextKey) {
@@ -120,10 +181,8 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
 
     const [classId, subjectId] = effectiveContextKey.split("::");
     const services = getAcademicServices();
+    const requestId = contextRequests.current.issue();
     let active = true;
-
-    setLoadingContext(true);
-    setContextError(null);
 
     void Promise.all([
       services.students.getByClass(classId),
@@ -133,24 +192,16 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
         const nextGrades = await services.grades.getByAssessments(
           nextAssessments.map((assessment) => assessment.id),
         );
-        if (!active) return;
+        if (!active || !contextRequests.current.isLatest(requestId)) return;
 
         setStudents(nextStudents);
         setAllAssessments(nextAssessments);
         setGrades(nextGrades);
+        setLoadedContextKey(effectiveContextKey);
 
-        const availablePeriods = [
-          ...new Set(nextAssessments.map((assessment) => assessment.period)),
-        ];
-        if (
-          availablePeriods.length > 0 &&
-          !availablePeriods.includes(period)
-        ) {
-          setPeriod(availablePeriods[0]);
-        }
       })
       .catch((cause: unknown) => {
-        if (!active) return;
+        if (!active || !contextRequests.current.isLatest(requestId)) return;
         setContextError(
           cause instanceof Error
             ? cause.message
@@ -158,37 +209,38 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
         );
       })
       .finally(() => {
-        if (active) setLoadingContext(false);
+        if (active && contextRequests.current.isLatest(requestId)) {
+          setLoadingContext(false);
+        }
       });
 
     return () => {
       active = false;
     };
-  }, [effectiveContextKey, period]);
+  }, [effectiveContextKey]);
 
   const periods = useMemo(
-    () => [...new Set(allAssessments.map((assessment) => assessment.period))],
+    () => [
+      ...new Set([
+        ...ACADEMIC_PERIODS,
+        ...allAssessments.map((assessment) => assessment.period),
+      ]),
+    ],
     [allAssessments],
   );
 
   const assessments = useMemo(
     () =>
-      allAssessments
-        .filter((assessment) => assessment.period === period)
+      filterAssessmentsByPeriod(allAssessments, period)
         .sort((a, b) => a.date.localeCompare(b.date)),
     [allAssessments, period],
   );
 
-  useEffect(() => {
-    if (
-      assessments.length > 0 &&
-      !assessments.some(
-        (assessment) => assessment.id === mobileAssessmentId,
-      )
-    ) {
-      setMobileAssessmentId(assessments[0].id);
-    }
-  }, [assessments, mobileAssessmentId]);
+  const effectiveMobileAssessmentId = assessments.some(
+    (assessment) => assessment.id === mobileAssessmentId,
+  )
+    ? mobileAssessmentId
+    : assessments[0]?.id ?? "";
 
   const gradeMap = useMemo(
     () =>
@@ -248,9 +300,11 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
         ACADEMIC_DEMO_CONFIG.passingAverage,
       ) === "attention",
   ).length;
-  const completeStudents = rows.filter(
-    (row) => calculateWeightedAverage(assessments, row.grades).pendingCount === 0,
-  ).length;
+  const completion = calculateGradebookCompletion(
+    students.map((student) => student.id),
+    assessments,
+    grades,
+  );
 
   const editableAssessmentIndices = assessments
     .map((assessment, index) =>
@@ -263,38 +317,48 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
     assessment: Assessment,
     score: number,
   ): Promise<Grade> {
+    if (csvApplyingRef.current) {
+      throw new Error("Aguarde a conclusão da importação CSV antes de editar notas.");
+    }
+
     const key = gradeKey(student.id, assessment.id);
     const services = getAcademicServices();
     const previous = mutationChains.current.get(key) ?? Promise.resolve();
+    setManualSaveCount((currentCount) => currentCount + 1);
 
     const current = previous
       .catch(() => undefined)
       .then(() =>
-        services.grades.saveManualGrade({
-          studentId: student.id,
-          assessmentId: assessment.id,
-          score,
-          actorId: DEMO_PROFILE_IDS.professor,
-        }),
+        persistManualGradeIncrementally(
+          services.grades,
+          {
+            studentId: student.id,
+            assessmentId: assessment.id,
+            score,
+            actorId: DEMO_PROFILE_IDS.professor,
+          },
+          (persistedGrade) => {
+            setGrades((currentGrades) => {
+              const withoutCurrent = currentGrades.filter(
+                (grade) =>
+                  !(
+                    grade.studentId === persistedGrade.studentId &&
+                    grade.assessmentId === persistedGrade.assessmentId
+                  ),
+              );
+              return [...withoutCurrent, persistedGrade];
+            });
+            updateGradeSnapshot(persistedGrade);
+          },
+        ),
       );
 
     mutationChains.current.set(key, current);
 
     try {
-      const result = await current;
-      setGrades((currentGrades) => {
-        const withoutCurrent = currentGrades.filter(
-          (grade) =>
-            !(
-              grade.studentId === result.grade.studentId &&
-              grade.assessmentId === result.grade.assessmentId
-            ),
-        );
-        return [...withoutCurrent, result.grade];
-      });
-      void refreshSnapshot();
-      return result.grade;
+      return await current;
     } finally {
+      setManualSaveCount((currentCount) => Math.max(0, currentCount - 1));
       if (mutationChains.current.get(key) === current) {
         mutationChains.current.delete(key);
       }
@@ -305,7 +369,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
     currentStudentIndex: number,
     currentAssessmentIndex: number,
     action: GradeNavigationAction,
-  ) {
+  ): HTMLInputElement | null {
     const next = getNextEditableCell(
       {
         studentIndex: currentStudentIndex,
@@ -317,17 +381,19 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
     );
     const nextStudent = filteredRows[next.studentIndex]?.student;
     const nextAssessment = assessments[next.assessmentIndex];
-    if (!nextStudent || !nextAssessment) return;
+    if (!nextStudent || !nextAssessment) return null;
 
-    inputRefs.current
-      .get(`desktop:${gradeKey(nextStudent.id, nextAssessment.id)}`)
-      ?.focus();
+    return (
+      inputRefs.current.get(
+        `desktop:${gradeKey(nextStudent.id, nextAssessment.id)}`,
+      ) ?? null
+    );
   }
 
   function navigateMobile(
     currentStudentIndex: number,
     assessmentIndex: number,
-  ) {
+  ): HTMLInputElement | null {
     const next = getNextEditableCell(
       { studentIndex: currentStudentIndex, assessmentIndex },
       "enter",
@@ -336,18 +402,23 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
     );
     const nextStudent = filteredRows[next.studentIndex]?.student;
     const nextAssessment = assessments[assessmentIndex];
-    if (!nextStudent || !nextAssessment) return;
+    if (!nextStudent || !nextAssessment) return null;
 
-    inputRefs.current
-      .get(`mobile:${gradeKey(nextStudent.id, nextAssessment.id)}`)
-      ?.focus();
+    return (
+      inputRefs.current.get(
+        `mobile:${gradeKey(nextStudent.id, nextAssessment.id)}`,
+      ) ?? null
+    );
   }
 
   const selectedStudent = students.find(
     (student) => student.id === selectedStudentId,
   );
 
-  if (loadingContext && assessments.length === 0) {
+  if (
+    effectiveContextKey &&
+    (loadingContext || loadedContextKey !== effectiveContextKey)
+  ) {
     return (
       <div className="academic-page">
         <div className="state-panel state-panel--loading" role="status">
@@ -388,9 +459,9 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
           <span>Turma · disciplina</span>
           <select
             value={effectiveContextKey}
+            disabled={csvApplying}
             onChange={(event) => {
-              setContextKey(event.target.value);
-              setSelectedStudentId(null);
+              beginContextTransition(event.target.value);
             }}
           >
             {contextOptions.map((option) => (
@@ -404,6 +475,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
           <span>Período</span>
           <select
             value={period}
+            disabled={csvApplying}
             onChange={(event) => setPeriod(event.target.value)}
           >
             {(periods.length > 0 ? periods : ACADEMIC_PERIODS).map(
@@ -430,6 +502,31 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
         </div>
       ) : null}
 
+      {!readOnly && assessments.length > 0 ? (
+        <GradeCsvImport
+          key={`${loadedContextKey}:${period}`}
+          assessments={assessments}
+          students={students}
+          teacherId={DEMO_PROFILE_IDS.professor}
+          disabled={manualSaveCount > 0}
+          onApplyingChange={handleCsvApplyingChange}
+          onImported={(persistedGrades) => {
+            setGrades((currentGrades) => {
+              const importedKeys = new Set(
+                persistedGrades.map((grade) => gradeKey(grade.studentId, grade.assessmentId)),
+              );
+              return [
+                ...currentGrades.filter(
+                  (grade) => !importedKeys.has(gradeKey(grade.studentId, grade.assessmentId)),
+                ),
+                ...persistedGrades,
+              ];
+            });
+            updateGradesSnapshot(persistedGrades);
+          }}
+        />
+      ) : null}
+
       <section className="gradebook-metrics" aria-label="Indicadores da turma">
         <MetricCard
           label="Média da turma"
@@ -451,7 +548,11 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
         <MetricCard
           label="Avaliações"
           value={assessments.length}
-          detail={`${completeStudents}/${students.length} alunos completos`}
+          detail={
+            !completion.applicable
+              ? "Completude não aplicável"
+              : `${completion.completedStudents}/${completion.totalStudents} alunos completos`
+          }
         />
       </section>
 
@@ -539,7 +640,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
                           <button
                             type="button"
                             className="student-cell-button"
-                            onClick={() => setSelectedStudentId(row.student.id)}
+                            onClick={() => openStudentDetail(row.student.id)}
                           >
                             <strong>{row.student.name}</strong>
                             <small>{row.student.registration}</small>
@@ -563,6 +664,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
                                   student={row.student}
                                   assessment={assessment}
                                   persisted={persisted}
+                                  disabled={csvApplying}
                                   inputRef={(element) => {
                                     const key = `desktop:${gradeKey(row.student.id, assessment.id)}`;
                                     if (element) inputRefs.current.set(key, element);
@@ -608,7 +710,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
               <label>
                 <span>Avaliação</span>
                 <select
-                  value={mobileAssessmentId}
+                  value={effectiveMobileAssessmentId}
                   onChange={(event) =>
                     setMobileAssessmentId(event.target.value)
                   }
@@ -624,7 +726,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
 
             {(() => {
               const assessment = assessments.find(
-                (item) => item.id === mobileAssessmentId,
+                (item) => item.id === effectiveMobileAssessmentId,
               ) ?? assessments[0];
               const assessmentIndex = assessments.findIndex(
                 (item) => item.id === assessment.id,
@@ -665,7 +767,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
                           <button
                             className="mobile-grade-row__student"
                             type="button"
-                            onClick={() => setSelectedStudentId(row.student.id)}
+                            onClick={() => openStudentDetail(row.student.id)}
                           >
                             <strong>{row.student.name}</strong>
                             <small>{row.student.registration}</small>
@@ -680,6 +782,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
                               student={row.student}
                               assessment={assessment}
                               persisted={persisted}
+                              disabled={csvApplying}
                               mobile
                               inputRef={(element) => {
                                 const key = `mobile:${gradeKey(row.student.id, assessment.id)}`;
@@ -709,7 +812,7 @@ export function GradebookPage({ readOnly = false }: GradebookPageProps) {
           assessments={assessments}
           grades={grades}
           classAverage={classAverage}
-          onClose={() => setSelectedStudentId(null)}
+          onClose={closeStudentDetail}
           data={data}
         />
       ) : null}
@@ -772,6 +875,7 @@ function GradeCell({
   student,
   assessment,
   persisted,
+  disabled,
   onSave,
   onNavigate,
   inputRef,
@@ -780,12 +884,13 @@ function GradeCell({
   student: Student;
   assessment: Assessment;
   persisted: Grade | undefined;
+  disabled: boolean;
   onSave: (
     student: Student,
     assessment: Assessment,
     score: number,
   ) => Promise<Grade>;
-  onNavigate: (action: GradeNavigationAction) => void;
+  onNavigate: (action: GradeNavigationAction) => HTMLInputElement | null;
   inputRef: (element: HTMLInputElement | null) => void;
   mobile?: boolean;
 }) {
@@ -795,18 +900,37 @@ function GradeCell({
   const [state, setState] = useState<CellSaveState>("idle");
   const [error, setError] = useState<string | null>(null);
   const operationVersion = useRef(0);
-  const skipNextBlur = useRef(false);
+  const blurCommitGuard = useRef(createGradeBlurCommitGuard());
+  const persistedVersion = `${persisted?.id ?? "pending"}:${persisted?.updatedAt ?? ""}:${persisted?.score ?? ""}`;
+  const [observedPersistedVersion, setObservedPersistedVersion] = useState(
+    persistedVersion,
+  );
 
-  useEffect(() => {
-    if (state === "editing" || state === "saving") return;
+  if (
+    observedPersistedVersion !== persistedVersion &&
+    state !== "editing" &&
+    state !== "saving"
+  ) {
+    setObservedPersistedVersion(persistedVersion);
     setDraft(
       persisted?.score === null || !persisted
         ? ""
         : formatScore(persisted.score),
     );
-  }, [persisted?.score, state, persisted]);
+  }
 
   async function commit(): Promise<boolean> {
+    if (disabled) {
+      setDraft(
+        persisted?.score === null || !persisted
+          ? ""
+          : formatScore(persisted.score),
+      );
+      setState("idle");
+      setError(null);
+      return false;
+    }
+
     const validated = validateScoreInput(draft, assessment.maxScore);
 
     if (!validated.ok) {
@@ -871,16 +995,18 @@ function GradeCell({
 
     if (!action) return;
     event.preventDefault();
-    skipNextBlur.current = true;
+    const currentInput = event.currentTarget;
 
     const saved = await commit();
     if (!saved) {
-      skipNextBlur.current = false;
-      event.currentTarget.focus();
+      currentInput.focus();
       return;
     }
 
-    onNavigate(mobile ? "enter" : action);
+    const target = onNavigate(mobile ? "enter" : action);
+    if (blurCommitGuard.current.prepareFocusTransfer(currentInput, target)) {
+      target?.focus();
+    }
   }
 
   return (
@@ -889,6 +1015,7 @@ function GradeCell({
         <input
           ref={inputRef}
           inputMode="decimal"
+          disabled={disabled}
           value={draft}
           aria-label={`Nota de ${student.name} em ${assessment.name}, máximo ${formatScore(assessment.maxScore)}`}
           aria-invalid={state === "error"}
@@ -906,8 +1033,7 @@ function GradeCell({
             setError(null);
           }}
           onBlur={() => {
-            if (skipNextBlur.current) {
-              skipNextBlur.current = false;
+            if (blurCommitGuard.current.consumeBlurSkip()) {
               return;
             }
             if (state === "editing") {
@@ -959,34 +1085,90 @@ function StudentDetailPanel({
   onClose: () => void;
   data: ReturnType<typeof useAcademicData>["data"];
 }) {
-  const studentGrades = grades.filter((grade) => grade.studentId === student.id);
+  const assessmentIds = useMemo(
+    () => assessments.map((assessment) => assessment.id),
+    [assessments],
+  );
+  const studentGrades = useMemo(
+    () =>
+      selectContextualStudentGrades(grades, student.id, assessmentIds),
+    [assessmentIds, grades, student.id],
+  );
   const result = calculateWeightedAverage(assessments, studentGrades);
   const state = calculateStudentAcademicState(assessments, studentGrades);
   const schoolClass = data?.classes.find((item) => item.id === student.classId);
-  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
-  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditQuery, setAuditQuery] = useState<{
+    gradeIdsKey: string | null;
+    state: AuditHistoryState;
+  }>({
+    gradeIdsKey: null,
+    state: { status: "empty", entries: [], error: null },
+  });
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const gradeIds = useMemo(
+    () => studentGrades.map((grade) => grade.id),
+    [studentGrades],
+  );
+  const gradeIdsKey = gradeIds.slice().sort().join("|");
+  const auditLoading = auditQuery.gradeIdsKey !== gradeIdsKey;
+  const auditState = auditQuery.state;
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      if (shouldCloseStudentDetail(event.key)) {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => document.removeEventListener("keydown", handleDialogKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     let active = true;
-    const gradeIds = studentGrades.map((grade) => grade.id);
-    setAuditLoading(true);
-    void getAcademicServices()
-      .audit.getByEntities(gradeIds)
-      .then((entries) => {
-        if (active) setAuditEntries(entries);
-      })
-      .finally(() => {
-        if (active) setAuditLoading(false);
-      });
+    void loadAuditHistory(
+      gradeIds,
+      (entityIds) => getAcademicServices().audit.getByEntities(entityIds),
+    ).then((nextState) => {
+      if (active) {
+        setAuditQuery({ gradeIdsKey, state: nextState });
+      }
+    });
     return () => {
       active = false;
     };
-  }, [student.id, grades]);
+  }, [gradeIds, gradeIdsKey]);
 
   return (
-    <section className="student-detail" aria-labelledby="student-detail-title">
+    <section className="student-detail">
       <div className="student-detail__backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="student-detail__panel">
+      <div
+        className="student-detail__panel"
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="student-detail-title"
+      >
         <header>
           <div>
             <span className="academic-kicker">Visão individual</span>
@@ -995,7 +1177,12 @@ function StudentDetailPanel({
               Matrícula {student.registration} · {schoolClass?.name ?? "Turma"}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar visão do aluno">
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar visão do aluno"
+          >
             ×
           </button>
         </header>
@@ -1052,13 +1239,17 @@ function StudentDetailPanel({
           <h3>Histórico de alterações</h3>
           {auditLoading ? (
             <p className="student-detail__empty">Carregando auditoria…</p>
-          ) : auditEntries.length === 0 ? (
+          ) : auditState.status === "error" ? (
+            <p className="student-detail__empty" role="alert">
+              Não foi possível carregar o histórico: {auditState.error}
+            </p>
+          ) : auditState.status === "empty" ? (
             <p className="student-detail__empty">
               Nenhuma alteração manual auditada para este aluno neste contexto.
             </p>
           ) : (
             <div className="audit-list">
-              {auditEntries.map((entry) => {
+              {auditState.entries.map((entry) => {
                 const grade = studentGrades.find(
                   (item) => item.id === entry.entityId,
                 );

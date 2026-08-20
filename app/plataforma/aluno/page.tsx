@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
 import { DataState } from "@/src/components/platform/DataState";
 import {
@@ -9,29 +10,40 @@ import {
   StatsGrid,
 } from "@/src/components/platform/DashboardUI";
 import { PlatformShell } from "@/src/components/platform/PlatformShell";
-import { DEMO_PROFILE_IDS } from "@/src/config/academic-demo";
 import {
-  calculateStudentAcademicState,
-  calculateWeightedAverage,
-} from "@/src/modules/grades/calculations";
-import { formatScore } from "@/src/modules/grades/input";
+  ACADEMIC_PERIODS,
+  DEMO_PROFILE_IDS,
+} from "@/src/config/academic-demo";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 function StudentDashboardContent() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
   const student = data?.students.find(
     (item) => item.id === DEMO_PROFILE_IDS.aluno,
   );
   const schoolClass = data?.classes.find(
     (item) => item.id === student?.classId,
   );
-  const assessments =
+  const assessments = filterAssessmentsByPeriod(
     data?.assessments.filter(
       (assessment) => assessment.classId === student?.classId,
-    ) ?? [];
+    ) ?? [],
+    period,
+  );
   const grades =
     data?.grades.filter((grade) => grade.studentId === student?.id) ?? [];
-  const result = calculateWeightedAverage(assessments, grades);
-  const state = calculateStudentAcademicState(assessments, grades);
+  const subjectCount = new Set(
+    assessments.map((assessment) => assessment.subjectId),
+  ).size;
+  const completedAssessments = assessments.filter((assessment) =>
+    grades.some(
+      (grade) =>
+        grade.assessmentId === assessment.id &&
+        grade.status === "recorded" &&
+        grade.score !== null,
+    ),
+  ).length;
 
   return (
     <>
@@ -40,6 +52,20 @@ function StudentDashboardContent() {
         title={student?.name ?? "Estudante Demo"}
         description="Consulte avaliações e notas persistidas no mesmo Academic Core utilizado pelos demais perfis."
       />
+      <section className="academic-context-bar" aria-label="Período acadêmico">
+        <label>
+          <span>Período</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {ACADEMIC_PERIODS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <div className="academic-context-bar__summary">
+          <small>Indicadores do estudante</small>
+          <strong>{period}</strong>
+        </div>
+      </section>
       <StatsGrid
         items={[
           {
@@ -55,17 +81,9 @@ function StudentDashboardContent() {
             accent: "green",
           },
           {
-            label: result.isPartial ? "Média parcial" : "Média",
-            value:
-              result.average === null
-                ? "—"
-                : formatScore(result.average, 1),
-            detail:
-              state === "pending"
-                ? "Existem notas pendentes"
-                : state === "attention"
-                  ? "Situação de atenção"
-                  : "Situação regular",
+            label: "Avaliações concluídas",
+            value: `${completedAssessments}/${assessments.length}`,
+            detail: `${subjectCount} disciplina${subjectCount === 1 ? "" : "s"} acompanhada${subjectCount === 1 ? "" : "s"} em ${period}`,
             accent: "amber",
           },
         ]}

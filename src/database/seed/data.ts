@@ -1,5 +1,6 @@
 import type {
   AcademicDataset,
+  AcademicSeedDataset,
   Assessment,
   AuditEntry,
   Grade,
@@ -315,6 +316,10 @@ export const demoDataset: AcademicDataset = {
   subjects: demoSubjects,
   assessments: demoAssessments,
   grades: demoGrades,
-  auditEntries: demoAuditEntries,
   teachingAssignments: demoTeachingAssignments,
+};
+
+export const demoSeedDataset: AcademicSeedDataset = {
+  ...demoDataset,
+  auditEntries: demoAuditEntries,
 };

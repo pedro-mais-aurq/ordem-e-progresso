@@ -19,6 +19,7 @@ import {
   TeachingAssignmentService,
   type AcademicServices,
 } from "@/src/services/academic-services";
+import { GradeImportService } from "@/src/services/grade-import-service";
 
 let services: AcademicServices | null = null;
 
@@ -46,9 +47,17 @@ export function getAcademicServices(): AcademicServices {
       teachingAssignments,
       classes,
       subjects,
+      grades,
+      students,
     ),
     teachingAssignments: new TeachingAssignmentService(teachingAssignments),
     grades: new GradeService(
+      grades,
+      assessments,
+      students,
+      teachingAssignments,
+    ),
+    gradeImports: new GradeImportService(
       grades,
       assessments,
       students,

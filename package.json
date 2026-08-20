@@ -9,23 +9,28 @@
     "install:ci": "bash scripts/install-ci.sh",
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
     "build": "bash scripts/build-verified.sh",
+    "build:pages": "GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-local/ordem-plataforma-progresso} GITHUB_PAGES=true next build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "typecheck": "tsc --noEmit",
     "test:domain": "node --import tsx --test tests/*.test.ts",
     "test:rendered": "node --test tests/rendered-html.test.mjs",
+    "test:pages": "GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-local/ordem-plataforma-progresso} node --import tsx --test tests/pages-artifact.test.mjs",
+    "test:pages:smoke": "GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-local/ordem-plataforma-progresso} node --import tsx --test tests/pages-http-smoke.test.mjs",
     "test": "npm run test:domain && npm run build && npm run test:rendered",
     "validate:artifact": "bash scripts/validate-artifact.sh",
-    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "audit:security": "npm audit --audit-level=high"
+    "serve:pages": "GITHUB_REPOSITORY=${GITHUB_REPOSITORY:-local/ordem-plataforma-progresso} node scripts/serve-pages.mjs",
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern out",
+    "audit:security": "npm audit --audit-level=high",
+    "audit:production": "npm audit --omit=dev"
   },
   "dependencies": {
-    "next": "16.2.6",
-    "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "next": "16.3.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "^4.20260702.1",
+    "@cloudflare/vite-plugin": "1.53.0",
+    "@cloudflare/workers-types": "^5.20260819.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -33,15 +38,15 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.1",
     "fake-indexeddb": "^6.2.5",
-    "react-server-dom-webpack": "19.2.6",
+    "react-server-dom-webpack": "19.2.8",
     "tailwindcss": "4.2.1",
     "tsx": "^4.23.12",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "vite": "8.2.1",
+    "wrangler": "4.124.0"
   },
   "type": "module",
   "displayName": "Ordem — Plataforma de Progresso"

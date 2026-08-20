@@ -69,3 +69,13 @@ export function canAccessSection(
 export function getProfileSections(profile: UserProfile): readonly PlatformSection[] {
   return PROFILE_CAPABILITIES[profile];
 }
+
+export function getStaticAcademicRouteParams(): Array<{
+  profile: UserProfile;
+  section: PlatformSection;
+}> {
+  return (Object.keys(PROFILE_CAPABILITIES) as UserProfile[]).flatMap(
+    (profile) =>
+      PROFILE_CAPABILITIES[profile].map((section) => ({ profile, section })),
+  );
+}

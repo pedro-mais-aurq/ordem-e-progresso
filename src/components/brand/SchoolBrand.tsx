@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { SCHOOL_BRAND, SCHOOL_LOGO_SRC } from "@/src/config/branding";
+import { withBasePath } from "@/src/config/base-path";
 
 interface SchoolBrandProps {
   context?: keyof typeof SCHOOL_BRAND;
@@ -27,7 +28,7 @@ export function SchoolBrand({
       {SCHOOL_LOGO_SRC ? (
         <Image
           className="school-brand__logo"
-          src={SCHOOL_LOGO_SRC}
+          src={withBasePath(SCHOOL_LOGO_SRC)}
           alt=""
           width={1024}
           height={1024}

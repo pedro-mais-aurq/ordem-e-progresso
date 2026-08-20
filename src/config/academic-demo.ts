@@ -15,3 +15,12 @@ export const ACADEMIC_PERIODS = [
   "3º bimestre",
   "4º bimestre",
 ] as const;
+
+export type AcademicPeriod = (typeof ACADEMIC_PERIODS)[number];
+
+export function isAcademicPeriod(value: unknown): value is AcademicPeriod {
+  return (
+    typeof value === "string" &&
+    ACADEMIC_PERIODS.some((period) => period === value)
+  );
+}

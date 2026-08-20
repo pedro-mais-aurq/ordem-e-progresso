@@ -1,4 +1,4 @@
-import type { AcademicDataset, MetadataRecord } from "@/src/types/academic";
+import type { AcademicSeedDataset, MetadataRecord } from "@/src/types/academic";
 import {
   deleteDemoDatabase,
   openOrdemDatabase,
@@ -6,7 +6,7 @@ import {
   transactionDone,
 } from "../indexed-db/client";
 import { ACADEMIC_STORE_NAMES, STORE_NAMES } from "../indexed-db/config";
-import { demoDataset } from "./data";
+import { demoSeedDataset } from "./data";
 
 export const SEED_VERSION = "p2-v2";
 const SEED_KEY = "demo-seed-version";
@@ -27,7 +27,7 @@ export interface SeedResult {
 }
 
 export async function seedDatabase(
-  dataset: AcademicDataset = demoDataset,
+  dataset: AcademicSeedDataset = demoSeedDataset,
 ): Promise<SeedResult> {
   const database = await openOrdemDatabase();
   const transaction = database.transaction(

@@ -43,6 +43,11 @@ export interface TeachingAssignmentRepository
   ): Promise<TeachingAssignment | null>;
 }
 
+export interface GradeAuditWrite {
+  grade: Grade;
+  auditEntry: AuditEntry;
+}
+
 export interface GradeRepository extends Repository<Grade> {
   getByStudentId(studentId: string): Promise<Grade[]>;
   getByAssessmentId(assessmentId: string): Promise<Grade[]>;
@@ -52,6 +57,7 @@ export interface GradeRepository extends Repository<Grade> {
   ): Promise<Grade | null>;
   upsert(grade: Grade): Promise<void>;
   saveGradeWithAudit(grade: Grade, auditEntry: AuditEntry): Promise<void>;
+  saveGradesWithAudit(entries: readonly GradeAuditWrite[]): Promise<Grade[]>;
 }
 
 export interface AuditRepository extends Repository<AuditEntry> {

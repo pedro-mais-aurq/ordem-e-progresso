@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
 import { DataState } from "@/src/components/platform/DataState";
 import {
@@ -10,22 +10,28 @@ import {
   StatsGrid,
 } from "@/src/components/platform/DashboardUI";
 import { PlatformShell } from "@/src/components/platform/PlatformShell";
+import { ACADEMIC_PERIODS } from "@/src/config/academic-demo";
 import {
   calculateClassAverage,
   calculateStudentAcademicState,
   countPendingGrades,
 } from "@/src/modules/grades/calculations";
 import { formatScore } from "@/src/modules/grades/input";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 function CoordinationDashboardContent() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
 
   const summaries = useMemo(() => {
     if (!data) return [];
 
     return data.subjects.map((subject) => {
-      const assessments = data.assessments.filter(
-        (assessment) => assessment.subjectId === subject.id,
+      const assessments = filterAssessmentsByPeriod(
+        data.assessments.filter(
+          (assessment) => assessment.subjectId === subject.id,
+        ),
+        period,
       );
       const classIds = [
         ...new Set(assessments.map((assessment) => assessment.classId)),
@@ -65,7 +71,7 @@ function CoordinationDashboardContent() {
               studentAverages.length,
       };
     });
-  }, [data]);
+  }, [data, period]);
 
   const pending = useMemo(() => {
     if (!data) return 0;
@@ -73,8 +79,11 @@ function CoordinationDashboardContent() {
       const students = data.students.filter(
         (student) => student.classId === schoolClass.id && student.active,
       );
-      const assessments = data.assessments.filter(
-        (assessment) => assessment.classId === schoolClass.id,
+      const assessments = filterAssessmentsByPeriod(
+        data.assessments.filter(
+          (assessment) => assessment.classId === schoolClass.id,
+        ),
+        period,
       );
       const grades = data.grades.filter((grade) =>
         assessments.some(
@@ -90,13 +99,16 @@ function CoordinationDashboardContent() {
         )
       );
     }, 0);
-  }, [data]);
+  }, [data, period]);
 
   const attention = useMemo(() => {
     if (!data) return 0;
     return data.students.filter((student) => {
-      const classAssessments = data.assessments.filter(
-        (assessment) => assessment.classId === student.classId,
+      const classAssessments = filterAssessmentsByPeriod(
+        data.assessments.filter(
+          (assessment) => assessment.classId === student.classId,
+        ),
+        period,
       );
       const subjectIds = [
         ...new Set(classAssessments.map((assessment) => assessment.subjectId)),
@@ -116,7 +128,7 @@ function CoordinationDashboardContent() {
         return calculateStudentAcademicState(assessments, grades) === "attention";
       });
     }).length;
-  }, [data]);
+  }, [data, period]);
 
   return (
     <>
@@ -125,6 +137,20 @@ function CoordinationDashboardContent() {
         title="Panorama acadêmico"
         description="Indicadores derivados das mesmas avaliações e notas persistidas pelo fluxo do professor."
       />
+      <section className="academic-context-bar" aria-label="Período acadêmico">
+        <label>
+          <span>Período</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {ACADEMIC_PERIODS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <div className="academic-context-bar__summary">
+          <small>Indicadores da coordenação</small>
+          <strong>{period}</strong>
+        </div>
+      </section>
       <StatsGrid
         items={[
           {
@@ -135,8 +161,11 @@ function CoordinationDashboardContent() {
           },
           {
             label: "Avaliações",
-            value: data?.assessments.length ?? 0,
-            detail: "Cadastradas na base",
+            value: filterAssessmentsByPeriod(
+              data?.assessments ?? [],
+              period,
+            ).length,
+            detail: `Cadastradas em ${period}`,
             accent: "green",
           },
           {

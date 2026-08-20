@@ -103,3 +103,40 @@ export function countPendingGrades(
   }
   return pending;
 }
+
+export interface GradebookCompletion {
+  applicable: boolean;
+  completedStudents: number;
+  totalStudents: number;
+}
+
+export function calculateGradebookCompletion(
+  studentIds: string[],
+  assessments: Assessment[],
+  grades: Grade[],
+): GradebookCompletion {
+  if (assessments.length === 0) {
+    return {
+      applicable: false,
+      completedStudents: 0,
+      totalStudents: studentIds.length,
+    };
+  }
+
+  const recorded = new Set(
+    grades
+      .filter((grade) => grade.status === "recorded" && grade.score !== null)
+      .map((grade) => `${grade.studentId}::${grade.assessmentId}`),
+  );
+  const completedStudents = studentIds.filter((studentId) =>
+    assessments.every((assessment) =>
+      recorded.has(`${studentId}::${assessment.id}`),
+    ),
+  ).length;
+
+  return {
+    applicable: true,
+    completedStudents,
+    totalStudents: studentIds.length,
+  };
+}

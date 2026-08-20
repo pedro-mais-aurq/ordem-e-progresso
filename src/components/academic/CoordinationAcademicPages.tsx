@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
+import { ACADEMIC_PERIODS } from "@/src/config/academic-demo";
 import {
   ASSESSMENT_STATUS_LABELS,
   ASSESSMENT_TYPE_LABELS,
@@ -13,19 +14,24 @@ import {
   countPendingGrades,
 } from "@/src/modules/grades/calculations";
 import { formatScore } from "@/src/modules/grades/input";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 export function CoordinationClassesPage() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
   const [selectedClassId, setSelectedClassId] = useState(
     data?.classes[0]?.id ?? "",
   );
 
   const effectiveClassId = selectedClassId || data?.classes[0]?.id || "";
   const schoolClass = data?.classes.find((item) => item.id === effectiveClassId);
-  const students =
-    data?.students.filter(
-      (student) => student.classId === effectiveClassId && student.active,
-    ) ?? [];
+  const students = useMemo(
+    () =>
+      data?.students.filter(
+        (student) => student.classId === effectiveClassId && student.active,
+      ) ?? [],
+    [data, effectiveClassId],
+  );
 
   const subjectSummaries = useMemo(() => {
     if (!data || !effectiveClassId) return [];
@@ -38,10 +44,13 @@ export function CoordinationClassesPage() {
 
     return subjectIds.map((subjectId) => {
       const subject = data.subjects.find((item) => item.id === subjectId);
-      const assessments = data.assessments.filter(
-        (assessment) =>
-          assessment.classId === effectiveClassId &&
-          assessment.subjectId === subjectId,
+      const assessments = filterAssessmentsByPeriod(
+        data.assessments.filter(
+          (assessment) =>
+            assessment.classId === effectiveClassId &&
+            assessment.subjectId === subjectId,
+        ),
+        period,
       );
       const grades = data.grades.filter((grade) =>
         assessments.some(
@@ -75,7 +84,7 @@ export function CoordinationClassesPage() {
         assessmentCount: assessments.length,
       };
     });
-  }, [data, effectiveClassId, students]);
+  }, [data, effectiveClassId, students, period]);
 
   return (
     <div className="academic-page">
@@ -102,6 +111,14 @@ export function CoordinationClassesPage() {
               <option value={item.id} key={item.id}>
                 {item.name} · {item.gradeLevel}
               </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Período</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {ACADEMIC_PERIODS.map((item) => (
+              <option key={item} value={item}>{item}</option>
             ))}
           </select>
         </label>
@@ -158,8 +175,12 @@ export function CoordinationClassesPage() {
 
 export function CoordinationAssessmentsPage() {
   const { data } = useAcademicData();
-  const assessments = [...(data?.assessments ?? [])].sort((a, b) =>
-    a.date.localeCompare(b.date),
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
+  const assessments = filterAssessmentsByPeriod(
+    [...(data?.assessments ?? [])].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    ),
+    period,
   );
 
   return (
@@ -174,6 +195,21 @@ export function CoordinationAssessmentsPage() {
           </p>
         </div>
       </header>
+
+      <section className="academic-context-bar" aria-label="Período acadêmico">
+        <label>
+          <span>Período</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {ACADEMIC_PERIODS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <div className="academic-context-bar__summary">
+          <small>Consulta da coordenação</small>
+          <strong>{period}</strong>
+        </div>
+      </section>
 
       {assessments.length === 0 ? (
         <div className="academic-empty academic-empty--large">

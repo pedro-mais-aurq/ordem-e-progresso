@@ -18,20 +18,35 @@ import type { UserProfile } from "@/src/types/academic";
 export function AcademicSectionPage({
   profile,
   section,
+  initialGradebookContext,
 }: {
   profile: UserProfile;
   section: PlatformSection;
+  initialGradebookContext?: {
+    classId: string;
+    subjectId: string;
+    period?: string;
+  };
 }) {
   if (profile === "professor") {
     if (section === "turmas") return <TeacherClassesPage />;
     if (section === "avaliacoes") return <AssessmentManager />;
-    if (section === "notas") return <GradebookPage />;
+    if (section === "notas") {
+      return <GradebookPage initialContext={initialGradebookContext} />;
+    }
   }
 
   if (profile === "coordenacao") {
     if (section === "turmas") return <CoordinationClassesPage />;
     if (section === "avaliacoes") return <CoordinationAssessmentsPage />;
-    if (section === "notas") return <GradebookPage readOnly />;
+    if (section === "notas") {
+      return (
+        <GradebookPage
+          readOnly
+          initialContext={initialGradebookContext}
+        />
+      );
+    }
   }
 
   if (profile === "aluno") {

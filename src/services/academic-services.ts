@@ -3,6 +3,7 @@ import type {
   AuditRepository,
   ClassRepository,
   GradeRepository,
+  GradeAuditWrite,
   StudentRepository,
   SubjectRepository,
   TeacherRepository,
@@ -19,6 +20,12 @@ import type {
   Teacher,
   TeachingAssignment,
 } from "@/src/types/academic";
+import {
+  parseAcademicPeriod,
+  parseAssessmentType,
+} from "@/src/modules/assessments/validation";
+import { AcademicIntegrityError } from "./academic-integrity";
+import type { GradeImportService } from "./grade-import-service";
 
 export function isValidRegistration(registration: string): boolean {
   return /^\d{8}$/.test(registration);
@@ -46,13 +53,26 @@ export function normalizeAssessmentStatus(status: unknown): AssessmentStatus {
     return "reviewed";
   }
 
-  return "draft";
+  throw new Error(`Status de avaliação desconhecido: ${String(status)}.`);
 }
 
 function normalizeAssessment(assessment: Assessment): Assessment {
+  let status: AssessmentStatus;
+  try {
+    status = normalizeAssessmentStatus(assessment.status);
+  } catch {
+    throw new AcademicIntegrityError([
+      {
+        code: "assessment.status.invalid",
+        entityId: assessment.id,
+        message: `A avaliação "${assessment.id}" possui status inválido.`,
+      },
+    ]);
+  }
+
   return {
     ...assessment,
-    status: normalizeAssessmentStatus(assessment.status),
+    status,
   };
 }
 
@@ -161,6 +181,8 @@ export class AssessmentService {
     private readonly assignmentRepository: TeachingAssignmentRepository,
     private readonly classRepository: ClassRepository,
     private readonly subjectRepository: SubjectRepository,
+    private readonly gradeRepository: GradeRepository,
+    private readonly studentRepository: StudentRepository,
   ) {}
 
   async getAll(): Promise<Assessment[]> {
@@ -190,13 +212,16 @@ export class AssessmentService {
   }
 
   async create(input: AssessmentInput, teacherId: string): Promise<Assessment> {
-    await this.validateInput(input, teacherId);
+    const period = parseAcademicPeriod(input.period.trim());
+    const type = parseAssessmentType(input.type);
+    await this.validateInput({ ...input, period, type }, teacherId);
 
     const assessment: Assessment = {
       id: createId("assessment"),
       ...input,
       name: input.name.trim(),
-      period: input.period.trim(),
+      period,
+      type,
       status: "draft",
     };
 
@@ -218,12 +243,80 @@ export class AssessmentService {
       throw new Error("Avaliação fechada não pode ser editada.");
     }
 
-    await this.validateInput(assessment, teacherId);
+    const normalizedPeriod = parseAcademicPeriod(assessment.period.trim());
+    const normalizedType = parseAssessmentType(assessment.type);
+    const normalizedStatus = normalizeAssessmentStatus(assessment.status);
+
+    // A autorização do contexto persistido e do contexto proposto é verificada
+    // separadamente. Assim, editar não pode ser usado para retirar uma
+    // avaliação de um vínculo que o professor já não está autorizado a operar.
+    await this.validateInput(normalizedExisting, teacherId);
+    await this.validateInput(
+      { ...assessment, period: normalizedPeriod, type: normalizedType },
+      teacherId,
+    );
+
+    const linkedGrades = await this.gradeRepository.getByAssessmentId(
+      assessment.id,
+    );
+    if (linkedGrades.length > 0) {
+      if (assessment.classId !== normalizedExisting.classId) {
+        throw new Error(
+          "A turma não pode ser alterada porque a avaliação já possui notas.",
+        );
+      }
+      if (assessment.subjectId !== normalizedExisting.subjectId) {
+        throw new Error(
+          "A disciplina não pode ser alterada porque a avaliação já possui notas.",
+        );
+      }
+      if (normalizedPeriod !== normalizedExisting.period) {
+        throw new Error(
+          "O período não pode ser alterado porque a avaliação já possui notas.",
+        );
+      }
+
+      const incompatibleGrade = linkedGrades.find(
+        (grade) => grade.score !== null && grade.score > assessment.maxScore,
+      );
+      if (incompatibleGrade) {
+        throw new Error(
+          `O valor máximo não pode ser menor que a nota já lançada (${incompatibleGrade.score}).`,
+        );
+      }
+    }
+
+    if (normalizedStatus === "closed") {
+      const students = await this.studentRepository.getByClassId(
+        assessment.classId,
+      );
+      const activeStudentIds = students
+        .filter((student) => student.active)
+        .map((student) => student.id);
+      const recordedStudentIds = new Set(
+        linkedGrades
+          .filter(
+            (grade) => grade.status === "recorded" && grade.score !== null,
+          )
+          .map((grade) => grade.studentId),
+      );
+      const pendingCount = activeStudentIds.filter(
+        (studentId) => !recordedStudentIds.has(studentId),
+      ).length;
+
+      if (pendingCount > 0) {
+        throw new Error(
+          `Não é possível fechar a avaliação: ${pendingCount} estudante(s) ativo(s) ainda possuem nota pendente.`,
+        );
+      }
+    }
+
     const updated: Assessment = {
       ...assessment,
       name: assessment.name.trim(),
-      period: assessment.period.trim(),
-      status: normalizeAssessmentStatus(assessment.status),
+      period: normalizedPeriod,
+      type: normalizedType,
+      status: normalizedStatus,
     };
     await this.repository.save(updated);
     return updated;
@@ -245,6 +338,8 @@ export class AssessmentService {
     if (!input.period.trim()) {
       throw new Error("O período é obrigatório.");
     }
+    parseAcademicPeriod(input.period.trim());
+    parseAssessmentType(input.type);
     assertValidDate(input.date);
 
     const [schoolClass, subject, assignment] = await Promise.all([
@@ -366,6 +461,10 @@ export class GradeService extends BasicService<Grade> {
     auditEntry: AuditEntry,
   ): Promise<void> {
     return this.gradeRepository.saveGradeWithAudit(grade, auditEntry);
+  }
+
+  saveGradesWithAudit(entries: readonly GradeAuditWrite[]): Promise<Grade[]> {
+    return this.gradeRepository.saveGradesWithAudit(entries);
   }
 
   async saveManualGrade(
@@ -491,5 +590,6 @@ export interface AcademicServices {
   assessments: AssessmentService;
   teachingAssignments: TeachingAssignmentService;
   grades: GradeService;
+  gradeImports: GradeImportService;
   audit: AuditService;
 }

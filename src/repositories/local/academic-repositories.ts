@@ -9,6 +9,7 @@ import type {
   AuditRepository,
   ClassRepository,
   GradeRepository,
+  GradeAuditWrite,
   StudentRepository,
   SubjectRepository,
   TeacherRepository,
@@ -268,6 +269,16 @@ export class LocalGradeRepository
     grade: Grade,
     auditEntry: AuditEntry,
   ): Promise<void> {
+    await this.saveGradesWithAudit([{ grade, auditEntry }]);
+  }
+
+  async saveGradesWithAudit(
+    entries: readonly GradeAuditWrite[],
+  ): Promise<Grade[]> {
+    if (entries.length === 0) {
+      return [];
+    }
+
     const database = await openOrdemDatabase();
     const transaction = database.transaction(
       [STORE_NAMES.grades, STORE_NAMES.auditEntries],
@@ -277,29 +288,34 @@ export class LocalGradeRepository
 
     try {
       const gradeStore = transaction.objectStore(STORE_NAMES.grades);
-      const existing = await requestToPromise(
-        gradeStore
-          .index("studentAssessment")
-          .get([grade.studentId, grade.assessmentId]) as IDBRequest<
-          Grade | undefined
-        >,
-      );
+      const auditStore = transaction.objectStore(STORE_NAMES.auditEntries);
+      const persistedGrades: Grade[] = [];
 
-      const persistedGrade: Grade = {
-        ...grade,
-        id: existing?.id ?? grade.id,
-        createdAt: existing?.createdAt ?? grade.createdAt,
-      };
-      const persistedAuditEntry: AuditEntry = {
-        ...auditEntry,
-        entityId: persistedGrade.id,
-      };
+      for (const { grade, auditEntry } of entries) {
+        const existing = await requestToPromise(
+          gradeStore
+            .index("studentAssessment")
+            .get([grade.studentId, grade.assessmentId]) as IDBRequest<
+            Grade | undefined
+          >,
+        );
+        const persistedGrade: Grade = {
+          ...grade,
+          id: existing?.id ?? grade.id,
+          createdAt: existing?.createdAt ?? grade.createdAt,
+        };
+        const persistedAuditEntry: AuditEntry = {
+          ...auditEntry,
+          entityId: persistedGrade.id,
+        };
 
-      gradeStore.put(persistedGrade);
-      transaction
-        .objectStore(STORE_NAMES.auditEntries)
-        .add(persistedAuditEntry);
+        gradeStore.put(persistedGrade);
+        auditStore.add(persistedAuditEntry);
+        persistedGrades.push(persistedGrade);
+      }
+
       await done;
+      return persistedGrades;
     } catch (error) {
       try {
         transaction.abort();

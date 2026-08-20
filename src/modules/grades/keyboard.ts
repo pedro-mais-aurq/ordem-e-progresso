@@ -5,6 +5,27 @@ export interface EditableCellPosition {
   assessmentIndex: number;
 }
 
+export interface GradeBlurCommitGuard {
+  prepareFocusTransfer(current: object, target: object | null): boolean;
+  consumeBlurSkip(): boolean;
+}
+
+export function createGradeBlurCommitGuard(): GradeBlurCommitGuard {
+  let skipNextBlur = false;
+
+  return {
+    prepareFocusTransfer(current, target) {
+      skipNextBlur = target !== null && target !== current;
+      return skipNextBlur;
+    },
+    consumeBlurSkip() {
+      const shouldSkip = skipNextBlur;
+      skipNextBlur = false;
+      return shouldSkip;
+    },
+  };
+}
+
 export function getNextEditableCell(
   current: EditableCellPosition,
   action: GradeNavigationAction,

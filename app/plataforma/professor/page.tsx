@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAcademicData } from "@/src/components/platform/AcademicDataProvider";
 import { DataState } from "@/src/components/platform/DataState";
 import {
@@ -9,11 +10,16 @@ import {
   StatsGrid,
 } from "@/src/components/platform/DashboardUI";
 import { PlatformShell } from "@/src/components/platform/PlatformShell";
-import { DEMO_PROFILE_IDS } from "@/src/config/academic-demo";
+import {
+  ACADEMIC_PERIODS,
+  DEMO_PROFILE_IDS,
+} from "@/src/config/academic-demo";
 import { countPendingGrades } from "@/src/modules/grades/calculations";
+import { filterAssessmentsByPeriod } from "@/src/modules/grades/period";
 
 function ProfessorDashboardContent() {
   const { data } = useAcademicData();
+  const [period, setPeriod] = useState<string>(ACADEMIC_PERIODS[0]);
   const teacher =
     data?.teachers.find((item) => item.id === DEMO_PROFILE_IDS.professor) ??
     data?.teachers[0];
@@ -28,10 +34,12 @@ function ProfessorDashboardContent() {
       (assignment) => `${assignment.classId}::${assignment.subjectId}`,
     ),
   );
-  const assessments =
+  const assessments = filterAssessmentsByPeriod(
     data?.assessments.filter((assessment) =>
       pairKeys.has(`${assessment.classId}::${assessment.subjectId}`),
-    ) ?? [];
+    ) ?? [],
+    period,
+  );
   const students =
     data?.students.filter(
       (student) => student.active && classIds.has(student.classId),
@@ -70,6 +78,7 @@ function ProfessorDashboardContent() {
         title={`Olá, ${teacher?.name ?? "Professor Demo"}`}
         description="Acesse suas TeachingAssignments, avaliações e o Painel Dinâmico para lançar notas com baixo atrito."
       />
+      <DashboardPeriodSelector period={period} onChange={setPeriod} />
       <StatsGrid
         items={[
           {
@@ -95,6 +104,31 @@ function ProfessorDashboardContent() {
       <QuickAccess profile="professor" />
       <AcademicCoreNotice />
     </>
+  );
+}
+
+function DashboardPeriodSelector({
+  period,
+  onChange,
+}: {
+  period: string;
+  onChange: (period: string) => void;
+}) {
+  return (
+    <section className="academic-context-bar" aria-label="Período acadêmico">
+      <label>
+        <span>Período</span>
+        <select value={period} onChange={(event) => onChange(event.target.value)}>
+          {ACADEMIC_PERIODS.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+      </label>
+      <div className="academic-context-bar__summary">
+        <small>Indicadores do professor</small>
+        <strong>{period}</strong>
+      </div>
+    </section>
   );
 }
 

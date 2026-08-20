@@ -2,6 +2,8 @@ import Link from "next/link";
 import { SchoolBrand } from "@/src/components/brand/SchoolBrand";
 import { InstitutionalEvidence } from "@/src/components/institutional/InstitutionalEvidence";
 import { InstitutionalHeader } from "@/src/components/institutional/InstitutionalHeader";
+import { withBasePath } from "@/src/config/base-path";
+import type { CSSProperties } from "react";
 
 const schoolPrinciples = [
   {
@@ -26,7 +28,13 @@ export default function Home() {
     <main className="institutional-site">
       <InstitutionalHeader />
 
-      <section className="institutional-hero" aria-labelledby="hero-title">
+      <section
+        className="institutional-hero"
+        aria-labelledby="hero-title"
+        style={{
+          "--campus-image": `url("${withBasePath("/assets/escola-campus.webp")}")`,
+        } as CSSProperties}
+      >
         <div className="institutional-hero__glow" aria-hidden="true" />
         <div className="institutional-container institutional-hero__content">
           <div className="institutional-hero__copy">
@@ -57,7 +65,11 @@ export default function Home() {
           </aside>
         </div>
 
-        <div className="campus-strip" role="img" aria-label="Vista do campus da Escola Estadual Ordem e Progresso">
+        <div
+          className="campus-strip"
+          role="img"
+          aria-label="Vista do campus da Escola Estadual Ordem e Progresso"
+        >
           <span>Nosso espaço, nossa comunidade.</span>
         </div>
       </section>
